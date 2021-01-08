@@ -83,6 +83,7 @@ fn add() -> ReadingEntry {
     }
 
     let re = ReadingEntry{
+        id: -1000, // Not needed here
         author: author,
         title: title,
         format: stringToFormatEnum(&format),
@@ -109,6 +110,7 @@ fn query_reading_list(conn: &Connection) -> Result<Vec<ReadingEntry>> {
         }
 
         return Ok(ReadingEntry {
+            id: row.get(0)?,
             title: row.get(1)?,
             author: row.get(2)?,
             genre: row.get(3)?,

@@ -1,7 +1,13 @@
 use structopt::StructOpt;
 use dialoguer::{Input, theme::ColorfulTheme};
 use rusqlite::{Connection, Result};
-use rusqlite::NO_PARAMS;
+use rusqlite::{NO_PARAMS, MappedRows, types::FromSql, types::FromSqlResult, types::ValueRef};
+
+use std::io;
+use std::io::Write;
+
+use comfy_table::Table;
+use comfy_table::presets::UTF8_FULL;
 
 #[derive(StructOpt)]
 struct Cli {
@@ -20,12 +26,25 @@ enum Format {
     Kindle
 }
 
+impl FromSql for Format {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value.as_str() {
+            Ok(s) => {
+                return Ok(Format::Book);
+            },
+            _ => return Ok(Format::Kindle),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct ReadingEntry {
+    id: i64,
     author: String,
     title: String,
     genre: String,
     format: Format,
+    status: String,
     tags: Vec<String>
 }
 
@@ -48,11 +67,12 @@ fn formatEnumToString(f: &Format) -> String {
 }
 
 fn add() -> ReadingEntry {
-    let author: String = create_promt_for(&String::from("Author"));
     let title: String = create_promt_for(&String::from("Title"));
+    let author: String = create_promt_for(&String::from("Author"));
+    let status: String = create_promt_for(&String::from("Status"));
     let format: String = create_promt_for(&String::from("Format"));
     let genre: String = create_promt_for(&String::from("Genre"));
-    let tags: String = create_promt_for(&String::from("Tags"));
+    let tags: String = create_promt_for(&String::from("Tags (space separated)"));
 
     let splits = tags.split(" ");
 
@@ -67,10 +87,43 @@ fn add() -> ReadingEntry {
         title: title,
         format: stringToFormatEnum(&format),
         genre: genre,
+        status: status,
         tags: vec
     };
 
     return re;
+}
+
+fn query_reading_list(conn: &Connection) -> Result<Vec<ReadingEntry>> {
+    let mut stmt = conn.prepare("SELECT id, title, author, genre, format, tags, status FROM reading_entries")?;
+
+    let entries = stmt.query_map(NO_PARAMS, |row| {
+
+        let tags_from_db: String = row.get(5)?;
+        let splits = tags_from_db.split(" ");
+
+        // gibt es hierfuer nicht schon was in der std lib?
+        let mut vec: Vec<String> = Vec::new();
+        for s in splits {
+            vec.push(String::from(s));
+        }
+
+        return Ok(ReadingEntry {
+            title: row.get(1)?,
+            author: row.get(2)?,
+            genre: row.get(3)?,
+            format: row.get(4)?,
+            status: row.get(6)?,
+            tags: vec
+        })
+    })?;
+
+    let mut entryList = Vec::new();
+    for e in entries {
+        entryList.push(e?);
+    }
+
+    return Ok(entryList);
 }
 
 fn create_promt_for(item: &str) -> String {
@@ -85,11 +138,12 @@ fn init_db(db_name: &str) -> Result<Connection> {
     conn.execute(
         " create table if not exists reading_entries (
             id integer primary key autoincrement,
-            title text,
-            author text,
-            genre text,
-            format text,
-            tags text,
+            title text not null default '',
+            author text not null default '',
+            genre text  not null default '',
+            format text not null default '',
+            tags text not null default '',
+            status text not null default '',
             created_at timestamp default current_timestamp,
             updated_at timestamp default current_timestamp
             );
@@ -99,8 +153,27 @@ fn init_db(db_name: &str) -> Result<Connection> {
 }
 
 fn insertReadingEntry(re: &ReadingEntry, conn: &Connection) {
-    let insertString = "insert into reading_entries (title, author, genre, format, tags) values (?1, ?2, ?3, ?4, ?5);";
-    conn.execute(insertString, &[&re.title, &re.author, &re.genre, &formatEnumToString(&re.format), &re.tags.join(" ")]);
+    let insertString = "insert into reading_entries (title, author, genre, format, tags, status) values (?1, ?2, ?3, ?4, ?5, ?6);";
+    conn.execute(insertString, &[&re.title, &re.author, &re.genre, &formatEnumToString(&re.format), &re.tags.join(" "), &re.status]);
+}
+
+fn print_table(entries: &Vec<ReadingEntry>) -> Table {
+    let mut table = Table::new();
+    table
+        .set_header(vec!["Title", "Author", "Genre", "Status", "Format"])
+        .load_preset(UTF8_FULL);
+
+    for e in entries {
+        table.add_row(vec![
+          &e.title,
+          &e.author,
+          &e.genre,
+          &e.status,
+          &formatEnumToString(&e.format)
+        ]);
+    }
+
+    return table
 }
 
 fn main() -> Result<()>{
@@ -112,7 +185,11 @@ fn main() -> Result<()>{
             let re = add();
             insertReadingEntry(&re, &dbConn)
         },
-        None => println!("print nice table with reading list here")
+        None => {
+            let entries = query_reading_list(&dbConn)?;
+
+            println!("{}", print_table(&entries));
+        }
     }
 
     Ok(())

@@ -48,6 +48,8 @@ pub fn formatEnumToString(f: &Format) -> String {
 }
 
 pub trait Backend {
+    fn getById(&self, id: i64) -> Result<ReadingEntry>;
+    fn updateEntry(&self, toUpdate: &ReadingEntry);
     fn addEntry(&self, e: &ReadingEntry);
     fn getAllEntries(&self) -> Result<Vec<ReadingEntry>>;
 }
@@ -80,6 +82,39 @@ impl SqliteBackend {
 }
 
 impl Backend for SqliteBackend {
+    fn getById(&self, id: i64) -> Result<ReadingEntry> {
+        let mut stmt = self.conn.prepare("SELECT id, title, author, genre, format, tags, status FROM reading_entries where id = ?1")?;
+
+        let entry = stmt.query_row(&[id], |row| {
+            let tags_from_db: String = row.get(5)?;
+            let splits = tags_from_db.split(" ");
+
+            // gibt es hierfuer nicht schon was in der std lib?
+            let mut vec: Vec<String> = Vec::new();
+            for s in splits {
+                vec.push(String::from(s));
+            }
+
+            return Ok(ReadingEntry {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                author: row.get(2)?,
+                genre: row.get(3)?,
+                format: row.get(4)?,
+                status: row.get(6)?,
+                tags: vec
+            })
+        })?;
+
+        Ok(entry)
+    }
+    
+    fn updateEntry(&self, toUpdate: &ReadingEntry) {
+        let insertString = "update reading_entries set title = ?1, author = ?2, genre = ?3, format = ?4, tags = ?5, status = ?6 where id = ?7;";
+        self.conn.execute(insertString, 
+                          &[&toUpdate.title, &toUpdate.author, &toUpdate.genre, &formatEnumToString(&toUpdate.format), &toUpdate.tags.join(" "), &toUpdate.status, &toUpdate.id.to_string()]);
+    }
+
     fn addEntry(&self, re: &ReadingEntry) {
         let insertString = "insert into reading_entries (title, author, genre, format, tags, status) values (?1, ?2, ?3, ?4, ?5, ?6);";
         self.conn.execute(insertString, &[&re.title, &re.author, &re.genre, &formatEnumToString(&re.format), &re.tags.join(" "), &re.status]);

@@ -1,11 +1,9 @@
 use structopt::StructOpt;
 use dialoguer::{Input, theme::ColorfulTheme};
 use rusqlite::{Connection, Result};
-use rusqlite::{NO_PARAMS, MappedRows, types::FromSql, types::FromSqlResult, types::ValueRef};
 
-use std::io;
-use std::io::Write;
-
+// Insight: Damit der Compiler Trait-Methoden an einer Struct aufrufen kann, muss das Trait
+// mit importiert werden.
 use readinglist::{Backend, SqliteBackend, ReadingEntry, Format, formatEnumToString, stringToFormatEnum};
 
 use comfy_table::Table;

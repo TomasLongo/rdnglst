@@ -408,7 +408,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "reading-list"
+name = "readinglist"
 version = "0.1.0"
 dependencies = [
  "comfy-table",

@@ -25,6 +25,11 @@ enum Command {
     Update {
         #[structopt(long = "id")]
         id: i64
+    },
+
+    Rm {
+        #[structopt(long = "id")]
+        id: i64
     }
 }
 
@@ -121,7 +126,6 @@ fn print_table(entries: &Vec<ReadingEntry>, withId: bool) -> Table {
 fn main() -> Result<()>{
     let args = Cli::from_args();
 
-    // let dbConn = init_db("./readinglist.db")?;
     let backend = SqliteBackend::new("./readinglist.db")?;
     match args.cmd {
         Some(Command::Add) => {
@@ -132,6 +136,9 @@ fn main() -> Result<()>{
             let toUpdate = backend.getById(id)?;
             let updated = promptForUpdate(&toUpdate);
             backend.updateEntry(&updated);
+        },
+        Some(Command::Rm{id}) => {
+            backend.deleteById(id);
         },
         None => {
             let entries = backend.getAllEntries()?;

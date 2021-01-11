@@ -49,6 +49,7 @@ pub fn formatEnumToString(f: &Format) -> String {
 
 pub trait Backend {
     fn getById(&self, id: i64) -> Result<ReadingEntry>;
+    fn deleteById(&self, id: i64) -> Result<ReadingEntry>;
     fn updateEntry(&self, toUpdate: &ReadingEntry);
     fn addEntry(&self, e: &ReadingEntry);
     fn getAllEntries(&self) -> Result<Vec<ReadingEntry>>;
@@ -107,6 +108,15 @@ impl Backend for SqliteBackend {
         })?;
 
         Ok(entry)
+    }
+
+    fn deleteById(&self, id: i64) -> Result<ReadingEntry> {
+        let entryToDelete = self.getById(id)?;
+
+        let mut stmt = self.conn.prepare("delete from reading_entries where id = ?1")?;
+        stmt.execute(&[id])?;
+
+        return Ok(entryToDelete);
     }
     
     fn updateEntry(&self, toUpdate: &ReadingEntry) {

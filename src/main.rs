@@ -126,7 +126,9 @@ fn print_table(entries: &Vec<ReadingEntry>, withId: bool) -> Table {
 fn main() -> Result<()>{
     let args = Cli::from_args();
 
-    let backend = SqliteBackend::new("./readinglist.db")?;
+    let dbLocation = "/Users/tlongo/projects/readinglist/reading-list/readinglist.db";
+
+    let backend = SqliteBackend::new(dbLocation)?;
     match args.cmd {
         Some(Command::Add) => {
             let re = add();

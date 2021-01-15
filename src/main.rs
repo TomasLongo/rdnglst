@@ -1,3 +1,6 @@
+// insight: mod keyword wird auch als import direktive verwendet
+mod querylanguage;
+
 use structopt::StructOpt;
 use dialoguer::{Input, theme::ColorfulTheme};
 use rusqlite::{Connection, Result};
@@ -9,13 +12,18 @@ use readinglist::{Backend, SqliteBackend, ReadingEntry, formatEnumToString, stri
 use comfy_table::Table;
 use comfy_table::presets::UTF8_FULL;
 
+use crate::querylanguage::{eval, parse_query, Modifier, TableRow};
+
 #[derive(StructOpt)]
 struct Cli {
     #[structopt(subcommand)]
     cmd: Option<Command>,
 
     #[structopt(short="i", long = "id")]
-    withId: bool
+    withId: bool,
+
+    #[structopt(short="q", long = "query", default_value="")]
+    q: String
 }
 
 #[derive(StructOpt)]
@@ -123,6 +131,25 @@ fn print_table(entries: &Vec<ReadingEntry>, withId: bool) -> Table {
     return table
 }
 
+fn createHeaderVec() -> Vec<String> {
+    return vec![
+        "author".to_string(),
+        "format".to_string(),
+        "genre".to_string(),
+        "title".to_string()
+    ];
+}
+
+fn createTableRowFromReadingEntry(re: &ReadingEntry) -> TableRow {
+    let mut row = TableRow::new();
+    row.insert(&"author".to_string(), &re.author);
+    row.insert(&"format".to_string(), &formatEnumToString(&re.format));
+    row.insert(&"genre".to_string(), &re.genre);
+    row.insert(&"title".to_string(), &re.title);
+
+    return row;
+}
+
 fn main() -> Result<()>{
     let args = Cli::from_args();
 
@@ -144,8 +171,17 @@ fn main() -> Result<()>{
         },
         None => {
             let entries = backend.getAllEntries()?;
+            let columns = createHeaderVec();
+            if args.q != "" {
+                let modifier: Modifier = parse_query(&args.q, &columns);
+                let filteredEntries = entries.into_iter()
+                    .filter(|re| eval(&modifier, &mut createTableRowFromReadingEntry(&re)))
+                    .collect();
+                println!("{}", print_table(&filteredEntries, args.withId));
+            } else {
+                println!("{}", print_table(&entries, args.withId));
+            }
 
-            println!("{}", print_table(&entries, args.withId));
         }
     }
 

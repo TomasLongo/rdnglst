@@ -1,45 +1,78 @@
 use std::result;
+use std::collections::HashMap;
 
-fn main() {
-    let columns = [String::from("uno"), String::from("dos")].to_vec();
-    let mods = [String::from("is"), String::from("and")].to_vec();
-    let columnValue = [String::from("tomas"), String::from("maus")].to_vec();
-
-    let modifier = parse_query("uno is tomas and tomas", &columns, &mods);
-
-    println!("{}", eval(&modifier, &columns, &columnValue));
-}
-
-fn eval(modifier: &Modifier, cols: &Vec<String>, col_values: &Vec<String>) -> bool {
+// Nachdem man die Query geparst hat, kann man mit dem gelieferten Modifier die 
+// einzelnen Zeilen einer Tabelle abgrasse;
+pub fn eval(modifier: &Modifier, row: &mut TableRow) -> bool {
     match &modifier.right {
         Some(x) => {
             match modifier.t {
-                ModType::And => return perform_comparison(&modifier.left, cols, col_values) && perform_comparison(&x, cols, col_values),
+                ModType::And => return perform_comparison(&modifier.left, row) && perform_comparison(&x, row),
                 ModType::Or => {
                     println!("Modifier or not covered yet");
                     return false;
                 }
             }
         },
-        None => return perform_comparison(&modifier.left, cols, col_values)
+        None => return perform_comparison(&modifier.left, row)
     }
 }
 
-fn perform_comparison(comp: &Comparison, cols: &Vec<String>, colValues: &Vec<String>) -> bool {
+fn perform_comparison(comp: &Comparison, row: &mut TableRow) -> bool {
     match &comp.t {
         Equal => {
             println!("Performin equal comparison");
-            let mut colValue: &String = &String::from("");
-            if (comp.col.name == "uno") {
-                colValue = &colValues[0];
-            } else if (comp.col.name == "dos") {
-                colValue = &colValues[1];
-            }
+            let col_value = row.get(&comp.col.name);
 
-            println!("comparing {} with {}", comp.ident.name, *colValue);
-            return comp.ident.name == *colValue;
+            println!("comparing {} with {}", &comp.ident.name, &col_value);
+
+            return comp.ident.name == col_value;
         }
     }
+}
+
+#[test]
+fn equal_comparison_works() {
+    let comp = Comparison {
+        t: CompType:: Equal,
+        col: Column {name: String::from("foo")},
+        ident: Ident { name: String::from("bar") }
+    };
+
+    let mut row = TableRow::new();
+    row.insert(&String::from("foo"), &String::from("bar"));
+
+    assert!(perform_comparison(&comp, &mut row), "Comparison should be true");
+
+
+    row.insert(&String::from("foo"), &String::from("hola"));
+    assert!(!perform_comparison(&comp, &mut row), "Comparison should be false");
+}
+
+// Abstraction over a table row holding columns and associated values
+pub struct TableRow {
+    values: HashMap<String, String>
+}
+
+impl TableRow {
+    pub fn new() -> TableRow {
+        return TableRow { values: HashMap::new() }
+    }
+
+    pub fn get(&mut self, column: &String) -> String {
+        match self.values.get(column) {
+            Some(x) => return x.clone(),
+            None => panic!("Could not find column {} in row", column)
+        }
+    }
+
+    pub fn insert(&mut self, column: &String, value: &String) {
+        self.values.insert(column.clone(), value.clone());
+    }
+}
+
+pub struct Table {
+    rows: Vec<TableRow>
 }
 
 fn is_col(cols: &Vec<String>, token: &String) -> bool {
@@ -50,18 +83,24 @@ fn is_mod(mods: &Vec<String>, token: &String) -> bool {
     return mods.iter().any(|x| x == token);
 }
 
-// Gibt den root modifier zurueck
-fn parse_query(q: &str, columns: &Vec<String>, mods: &Vec<String>) -> Modifier {
+/// Parses a query string building the syntax tree. Performs
+/// checks against valid columns by using the passed vec of 
+/// column names.
+///
+/// Returns the root node of the tree which can then be used
+/// to evaluate the query against real data
+pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
     let mut comp: Comparison = Comparison::default();
     let mut root: Modifier = Modifier::default();
 
     let mut token = String::new();
 
     // start state
-    // states: col compType ident mod
     let mut expectedToken = "col";
     let mut currentModifier: &mut Modifier = &mut root;
     let mut current_comp: &mut Comparison = &mut currentModifier.left;
+
+    let mods: Vec<String> = vec!["is".to_string(), "has".to_string()];
 
     for c in q.chars() {
         if c == ' ' {
@@ -90,7 +129,7 @@ fn parse_query(q: &str, columns: &Vec<String>, mods: &Vec<String>) -> Modifier {
                 // mod creates new comparison
                 
 
-                if is_mod(mods, &token) == false {
+                if is_mod(&mods, &token) == false {
                     panic!("expected modifier");
                 }
 
@@ -138,7 +177,7 @@ enum ModType {
     Or
 }
 
-struct Modifier {
+pub struct Modifier {
     left: Comparison,
 
     // Comparison gehoert nicht dem Modifier, sondern dem Option
@@ -163,6 +202,7 @@ impl Modifier {
     }
 }
 
+/// Defines the comparison of a value with the content of a column
 #[derive(Debug)]
 struct Comparison {
     ident: Ident,
@@ -185,8 +225,8 @@ struct Ident {
     name: String
 }
 
+/// Represents a named column in a table
 #[derive(Debug)]
 struct Column {
     name: String
 }
-

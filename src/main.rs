@@ -136,6 +136,7 @@ fn createHeaderVec() -> Vec<String> {
         "author".to_string(),
         "format".to_string(),
         "genre".to_string(),
+        "status".to_string(),
         "title".to_string()
     ];
 }
@@ -146,6 +147,7 @@ fn createTableRowFromReadingEntry(re: &ReadingEntry) -> TableRow {
     row.insert(&"format".to_string(), &formatEnumToString(&re.format));
     row.insert(&"genre".to_string(), &re.genre);
     row.insert(&"title".to_string(), &re.title);
+    row.insert(&"status".to_string(), &re.status);
 
     return row;
 }

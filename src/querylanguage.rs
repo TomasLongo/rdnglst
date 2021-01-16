@@ -83,6 +83,40 @@ fn is_mod(mods: &Vec<String>, token: &String) -> bool {
     return mods.iter().any(|x| x == token);
 }
 
+#[derive(PartialEq, Debug)]
+enum State {
+    Start,
+    Col,
+    Value,
+    CompOp,
+    MultiWordValue,
+    Operator
+}
+
+#[test]
+fn test_query_parsing_single_value() {
+    let cols = vec![String::from("eins")];
+
+    let modi = parse_query("eins is zwei", &cols);
+    assert_eq!(modi.t, ModType::And);
+    assert_eq!(modi.left.col.name, String::from("eins"));
+    assert_eq!(modi.left.ident.name, String::from("zwei"));
+    assert!(modi.right.is_none());
+
+}
+
+#[test]
+fn test_query_parsing_multivalue() {
+    let cols = vec![String::from("eins")];
+
+    let modi = parse_query("eins is \"zwei drei\"", &cols);
+    assert_eq!(modi.t, ModType::And);
+    assert_eq!(modi.left.col.name, String::from("eins"));
+    assert_eq!(modi.left.ident.name, String::from("zwei drei"));
+    assert_eq!(modi.left.t, CompType::Equal);
+    assert!(modi.right.is_none());
+}
+
 /// Parses a query string building the syntax tree. Performs
 /// checks against valid columns by using the passed vec of 
 /// column names.
@@ -95,42 +129,79 @@ pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
 
     let mut token = String::new();
 
-    // start state
-    let mut expectedToken = "col";
+    let mut current_state = State::Start;
+
     let mut currentModifier: &mut Modifier = &mut root;
     let mut current_comp: &mut Comparison = &mut currentModifier.left;
 
     let mods: Vec<String> = vec!["is".to_string(), "has".to_string()];
 
     for c in q.chars() {
-        if c == ' ' {
-            if expectedToken == "col" {
+        // end of word
+        //
+        if c != ' ' {
+            if c == '"' {
+                if current_state == State::Value {
+                    // start of multiword value
+                    eprintln!("Start of multiwordvalue");
+                    current_state = State::MultiWordValue;
+                } 
+                else {
+                    // end of multiwordvalue
+                    // is this the last char in the query?
+                    // If so, should we be fine b
+                    //
+                    // if not, we have to set the new state
+                    eprintln!("End of multiwordvalue");
+                    current_state = State::MultiWordValue;
+                }
+            } else {
+                token.push(c);
+            }
+        } 
+        else {
+            //  we encountered a space which acts as a separator
+
+            if current_state == State::MultiWordValue  {
+                eprintln!("Detected multiword value {}", token);
+                //  add the space if we are dealing with a multiword value
+                token.push(c);
+            } 
+            else if current_state == State::Start {
+                // We expect a column name at the very beginning
                 if !is_col(&columns, &token) {
+                    eprintln!("Expected a col name. Got {}", token);
                     panic!(String::from("Expected a col ident"));
                 }
 
-                println!("Found column {}", token);
+                eprintln!("Found column {}", token);
                 current_comp.col = Column {name: token};
-                expectedToken = "compType"
 
-            } else if expectedToken == "compType" {
+                // Comparison Operator should be next
+                current_state = State::CompOp;
+
+                token = String::new();
+
+            } else if current_state == State::CompOp {
                 if token == "is" {
                     current_comp.t = CompType::Equal;
-                    println!("Found comp type equal");
-                    expectedToken = "ident"
+                    eprintln!("Found comp type equal");
+                    current_state = State::Value;
                 } else {
-                    panic!(String::from("Expected a comp type ident"));
+                    panic!("Expected a comparison operator ('is' or 'has') but found {}", token);
                 }
-            } else if expectedToken == "ident" {
-                println!("Found iden {}", token);
+                token = String::new();
+            } else if current_state == State::Value {
+                eprintln!("Found value '{}'", token);
                 current_comp.ident = Ident {name: token};
-                expectedToken = "mod"
-            } else if expectedToken == "mod" {
-                // mod creates new comparison
+                current_state = State::Operator;
+                token = String::new();
+            } else if current_state == State::Operator {
+                // an operator creates new comparison
                 
 
                 if is_mod(&mods, &token) == false {
-                    panic!("expected modifier");
+                    panic!("expected an operator ('and' or 'or'), Found {}", &token);
                 }
 
                 let new_comp = Comparison {
@@ -144,17 +215,17 @@ pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
                     Some(ref mut x) => current_comp = x,
                     None => panic!("Could not get right hand side of modifier")
                 }
-                println!("Found new comparison: {:?}", current_comp);
-                expectedToken = "ident";
+                eprintln!("Found additional comparison: {:?}", current_comp);
+                current_state = State::Value;
+                token = String::new();
             }
 
-            token = String::new();
             continue;
         } 
 
-        token.push(c);
     }
-    if expectedToken != "ident" {
+    if current_state != State::Value && current_state != State::MultiWordValue {
+        eprintln!("We are at the end of the query and expecting a value. But we are currently in {:?}", current_state);
         panic!(String::from("Wrong state"));
     }
 
@@ -165,13 +236,14 @@ pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
 }
 
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 enum CompType {
     Equal,
     Contains,
     No
 }
 
+#[derive(Debug, PartialEq)]
 enum ModType {
     And,
     Or

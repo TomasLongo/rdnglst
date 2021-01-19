@@ -1,5 +1,7 @@
 // insight: mod keyword wird auch als import direktive verwendet
 mod querylanguage;
+mod config;
+mod log;
 
 use structopt::StructOpt;
 use dialoguer::{Input, theme::ColorfulTheme};
@@ -13,6 +15,16 @@ use comfy_table::Table;
 use comfy_table::presets::UTF8_FULL;
 
 use crate::querylanguage::{eval, parse_query, Modifier, TableRow};
+use crate::config::Config;
+
+#[macro_use]
+extern crate lazy_static;
+
+lazy_static! {
+    pub static ref CONFIG: Config = {
+        return initConfig();
+    };
+}
 
 #[derive(StructOpt)]
 struct Cli {
@@ -22,8 +34,14 @@ struct Cli {
     #[structopt(short="i", long = "id")]
     withId: bool,
 
+    #[structopt(short="x", long = "debug")]
+    debug: bool,
+
     #[structopt(short="q", long = "query", default_value="")]
-    q: String
+    q: String,
+
+    #[structopt(long = "db-file", default_value="~/.config/readinglist/readinglist.db")]
+    db_file_location: String
 }
 
 #[derive(StructOpt)]
@@ -152,12 +170,20 @@ fn createTableRowFromReadingEntry(re: &ReadingEntry) -> TableRow {
     return row;
 }
 
+fn initConfig() -> Config {
+    let args = Cli::from_args();
+    return Config {
+        debug: args.debug,
+        db_file_location: args.db_file_location,
+        withId: args.withId,
+        query: args.q
+    }
+}
+
 fn main() -> Result<()>{
     let args = Cli::from_args();
+    let backend = SqliteBackend::new(&CONFIG.db_file_location)?;
 
-    let dbLocation = "/Users/tlongo/projects/readinglist/reading-list/readinglist.db";
-
-    let backend = SqliteBackend::new(dbLocation)?;
     match args.cmd {
         Some(Command::Add) => {
             let re = add();
@@ -174,14 +200,15 @@ fn main() -> Result<()>{
         None => {
             let entries = backend.getAllEntries()?;
             let columns = createHeaderVec();
-            if args.q != "" {
-                let modifier: Modifier = parse_query(&args.q, &columns);
+            if CONFIG.query != "" {
+                let modifier: Modifier = parse_query(&CONFIG.query, &columns);
                 let filteredEntries = entries.into_iter()
                     .filter(|re| eval(&modifier, &mut createTableRowFromReadingEntry(&re)))
                     .collect();
-                println!("{}", print_table(&filteredEntries, args.withId));
+
+                println!("{}", print_table(&filteredEntries, CONFIG.withId));
             } else {
-                println!("{}", print_table(&entries, args.withId));
+                println!("{}", print_table(&entries, CONFIG.withId));
             }
 
         }

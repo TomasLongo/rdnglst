@@ -1,3 +1,6 @@
+use super::CONFIG;
+use crate::log::debug;
+
 use std::result;
 use std::collections::HashMap;
 
@@ -9,7 +12,7 @@ pub fn eval(modifier: &Modifier, row: &mut TableRow) -> bool {
             match modifier.t {
                 ModType::And => return perform_comparison(&modifier.left, row) && perform_comparison(&x, row),
                 ModType::Or => {
-                    println!("Modifier or not covered yet");
+                    debug(&"Modifier or not covered yet".to_string());
                     return false;
                 }
             }
@@ -21,10 +24,9 @@ pub fn eval(modifier: &Modifier, row: &mut TableRow) -> bool {
 fn perform_comparison(comp: &Comparison, row: &mut TableRow) -> bool {
     match &comp.t {
         Equal => {
-            println!("Performin equal comparison");
             let col_value = row.get(&comp.col.name);
 
-            println!("comparing {} with {}", &comp.ident.name, &col_value);
+            debug(&format!("Performin equal comparison [{} == {}]", &comp.ident.name, &col_value));
 
             return comp.ident.name == col_value;
         }
@@ -143,7 +145,7 @@ pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
             if c == '"' {
                 if current_state == State::Value {
                     // start of multiword value
-                    eprintln!("Start of multiwordvalue");
+                    debug(&"Start of multiwordvalue".to_string());
                     current_state = State::MultiWordValue;
                 } 
                 else {
@@ -152,7 +154,7 @@ pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
                     // If so, should we be fine b
                     //
                     // if not, we have to set the new state
-                    eprintln!("End of multiwordvalue");
+                    debug(&"End of multiwordvalue".to_string());
                     current_state = State::MultiWordValue;
                 }
             } else {
@@ -163,18 +165,18 @@ pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
             //  we encountered a space which acts as a separator
 
             if current_state == State::MultiWordValue  {
-                eprintln!("Detected multiword value {}", token);
+                debug(&format!("Detected multiword value {}", token));
                 //  add the space if we are dealing with a multiword value
                 token.push(c);
             } 
             else if current_state == State::Start {
                 // We expect a column name at the very beginning
                 if !is_col(&columns, &token) {
-                    eprintln!("Expected a col name. Got {}", token);
+                    debug(&format!("Expected a col name. Got {}", token));
                     panic!(String::from("Expected a col ident"));
                 }
 
-                eprintln!("Found column {}", token);
+                debug(&format!("Found column {}", token));
                 current_comp.col = Column {name: token};
 
                 // Comparison Operator should be next
@@ -185,14 +187,14 @@ pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
             } else if current_state == State::CompOp {
                 if token == "is" {
                     current_comp.t = CompType::Equal;
-                    eprintln!("Found comp type equal");
+                    debug(&"Found comp type equal".to_string());
                     current_state = State::Value;
                 } else {
                     panic!("Expected a comparison operator ('is' or 'has') but found {}", token);
                 }
                 token = String::new();
             } else if current_state == State::Value {
-                eprintln!("Found value '{}'", token);
+                debug(&format!("Found value '{}'", token));
                 current_comp.ident = Ident {name: token};
                 current_state = State::Operator;
                 token = String::new();
@@ -215,7 +217,7 @@ pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
                     Some(ref mut x) => current_comp = x,
                     None => panic!("Could not get right hand side of modifier")
                 }
-                eprintln!("Found additional comparison: {:?}", current_comp);
+                debug(&format!("Found additional comparison: {:?}", current_comp));
                 current_state = State::Value;
                 token = String::new();
             }
@@ -225,11 +227,11 @@ pub fn parse_query(q: &str, columns: &Vec<String>) -> Modifier {
 
     }
     if current_state != State::Value && current_state != State::MultiWordValue {
-        eprintln!("We are at the end of the query and expecting a value. But we are currently in {:?}", current_state);
+        debug(&format!("We are at the end of the query and expecting a value. But we are currently in {:?}", current_state));
         panic!(String::from("Wrong state"));
     }
 
-    println!("Found final ident {}", token);
+    debug(&format!("Found final ident {}", token));
     current_comp.ident = Ident {name: token};
 
     return root;

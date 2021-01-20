@@ -174,14 +174,41 @@ fn initConfig() -> Config {
     let args = Cli::from_args();
     return Config {
         debug: args.debug,
-        db_file_location: args.db_file_location,
+        db_file_location: expandTilde(&args.db_file_location),
         withId: args.withId,
         query: args.q
     }
 }
 
+#[test]
+fn test_expand_tilde() {
+    assert_eq!(expandTilde(&"/foo/bar".to_string()), "/foo/bar".to_string());
+    assert_eq!(expandTilde(&"~".to_string()), std::env::var("HOME").unwrap());
+    assert_eq!(expandTilde(&"~/foo".to_string()), "/Users/tlongo/foo".to_string());
+    assert_eq!(expandTilde(&"foo/bar".to_string()), "foo/bar".to_string());
+}
+
+fn expandTilde(dir: &String) -> String {
+    let path = std::path::Path::new(dir);
+    if path.has_root() == true {
+        return dir.clone();
+    }
+
+    if dir.starts_with("~") == true {
+        if (dir.len() == 1) {
+            return std::env::var("HOME").unwrap();
+        } else {
+            let path_no_tilde: &str = &dir.as_str()[2..];
+            return format!("{}/{}", std::env::var("HOME").unwrap(), &path_no_tilde);
+        }
+    }
+
+    return dir.clone();
+}
+
 fn main() -> Result<()>{
     let args = Cli::from_args();
+
     let backend = SqliteBackend::new(&CONFIG.db_file_location)?;
 
     match args.cmd {

@@ -3,6 +3,8 @@ mod querylanguage;
 mod config;
 mod log;
 
+use crate::log::debug;
+
 use structopt::StructOpt;
 use dialoguer::{Input, theme::ColorfulTheme};
 use rusqlite::{Connection, Result};
@@ -31,30 +33,36 @@ struct Cli {
     #[structopt(subcommand)]
     cmd: Option<Command>,
 
-    #[structopt(short="i", long = "id")]
+    #[structopt(short="i", long = "id", help="Print an additional column showing the id of item")]
     withId: bool,
 
-    #[structopt(short="x", long = "debug")]
+    #[structopt(short="x", long = "debug", help="Print debug output on stderr")]
     debug: bool,
 
     #[structopt(short="q", long = "query", default_value="")]
     q: String,
 
-    #[structopt(long = "db-file", default_value="~/.config/readinglist/readinglist.db")]
+    #[structopt(
+        long = "db-file",
+        default_value="~/rdnglst/readinglist.db",
+        help="Use db file under <db_file_location>")]
     db_file_location: String
 }
 
 #[derive(StructOpt)]
 enum Command {
+    #[structopt(about="Add a new item to the list")]
     Add,
 
+    #[structopt(about="Update an item")]
     Update {
-        #[structopt(long = "id")]
+        #[structopt(long = "id", help="The id of the item to update")]
         id: i64
     },
 
+    #[structopt(about="Remove an item")]
     Rm {
-        #[structopt(long = "id")]
+        #[structopt(long = "id", help="The id of the item which should be deleted")]
         id: i64
     }
 }
@@ -206,8 +214,21 @@ fn expandTilde(dir: &String) -> String {
     return dir.clone();
 }
 
+fn createAppFolderIfNeccessary() -> std::io::Result<()>{
+    let expanded = expandTilde(&"~/rdnglst".to_string());
+    let app_folder = std::path::Path::new(&expanded);
+    if !app_folder.exists() {
+        debug(&"Created app dir".to_string());
+        std::fs::create_dir(app_folder)?;
+    }
+
+    return Ok(())
+}
+
 fn main() -> Result<()>{
     let args = Cli::from_args();
+
+    createAppFolderIfNeccessary();
 
     let backend = SqliteBackend::new(&CONFIG.db_file_location)?;
 
